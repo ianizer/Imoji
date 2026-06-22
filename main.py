@@ -1,6 +1,8 @@
 import sys
+from typing import cast
 from PySide6.QtWidgets import *
-from PySide6.QtCore import Qt
+from PySide6.QtCore import *
+from PySide6.QtGui import *  # includes QPixmap
 
 
 class Imoji(QMainWindow):
@@ -34,6 +36,39 @@ class Imoji(QMainWindow):
 
         # Then place the sub-layout on the main/central layout to make it appear.
         central_layout.addLayout(example_sublayout)
+
+        # Image displays section.
+        # Make custom widget later that does all this work on instantiation of the widget.
+
+        images_layout = QVBoxLayout()
+        images_layout.setSpacing(10)
+
+        # Make an image-display widget.
+        # Can use a customized label (better image support but harder to code) instead of a button.
+        pic_test = QPixmap("Timestamper icon.png")
+        pic_test = pic_test.scaled(
+            50, 50, aspectMode=Qt.AspectRatioMode.KeepAspectRatio
+        )
+
+        image_widget = QPushButton()
+        image_widget.setMinimumSize(70, 70)
+        image_widget.setMaximumSize(70, 70)
+        image_widget.setIcon(pic_test)
+        image_widget.setIconSize(QSize(50, 50))
+
+        image_widget.clicked.connect(self.image_clicked)
+
+        images_layout.addWidget(image_widget)
+
+        central_layout.addLayout(images_layout)
+
+    def image_clicked(self):
+        sender = cast(QPushButton, self.sender())
+
+        btn_icon = sender.icon()
+        btn_icon = btn_icon.pixmap(50, 50)
+
+        QApplication.clipboard().setImage(btn_icon.toImage())
 
 
 # This block only runs if the module/file is run directly, not imported.
