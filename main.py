@@ -4,38 +4,77 @@ from typing import cast
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from PySide6.QtGui import *  # includes QPixmap
-from PIL import Image  # To check if valid images.
+
+DEFAULT_ICON_SIZE = QSize(100, 100)
+DEFAULT_COPIED_IMAGE_SIZE = QSize(100, 100)
+IMAGE_BUTTON_BORDER_SIZE = QSize(20, 20)
 
 
 class ImageCopier(QWidget):
     def __init__(self, image_path: pathlib.Path):
         super().__init__()
 
+        self.image_path = image_path
+
+        icon_pixmap: QPixmap = QPixmap(image_path).scaled(
+            DEFAULT_ICON_SIZE,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
+        self.render_image(DEFAULT_COPIED_IMAGE_SIZE)
+
         main_layout = QVBoxLayout()
         self.setLayout(main_layout)
 
-        # Can use a customized label (better image support but harder to code) instead of a button.
-        image = QPixmap(image_path)
-        image = image.scaled(50, 50, aspectMode=Qt.AspectRatioMode.KeepAspectRatio)
-
         image_widget = QPushButton()
-        image_widget.setMinimumSize(70, 70)
-        image_widget.setMaximumSize(70, 70)
-        image_widget.setIcon(image)
-        image_widget.setIconSize(QSize(50, 50))
+        image_widget.setMinimumSize(DEFAULT_ICON_SIZE + IMAGE_BUTTON_BORDER_SIZE)
+        image_widget.setMaximumSize(DEFAULT_ICON_SIZE + IMAGE_BUTTON_BORDER_SIZE)
+        image_widget.setIcon(icon_pixmap)
+        image_widget.setIconSize(DEFAULT_ICON_SIZE)
 
         image_widget.clicked.connect(self.image_clicked)
 
         main_layout.addWidget(image_widget)
 
+    def render_image(self, new_image_size: QSize):
+        """Renders the image to be copied to clipboard when image_clicked() runs.
+
+        Specifically, places the scaled image from the image file into a transparent new_image_size-sized blank canvas for pleasant pasting.
+
+        Stores final rendered image in self.rendered_image.
+        """
+
+        scaled_image_pixmap = QPixmap(self.image_path).scaled(
+            new_image_size,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
+        # Make a transparent pixmap to place our scaled image inside.
+
+        self.pixmap_render = QPixmap(new_image_size)
+        self.pixmap_render.fill(Qt.GlobalColor.transparent)
+
+        # Make a QPainter object so we can place the scaled image in the blank_pixmap.
+        image_painter = QPainter(self.pixmap_render)
+
+        # Calculate coords to center the scaled image in the blank canvas.
+        # Explanation: new_image_size.width() gives total blank space (on x-axis).
+        # scaled_image_pixmap.width() gives space to be occupied (x-axis).
+        # Subtracting them gives the space left empty after scaled image is placed.
+        # Divide by 2 for equal blank space on left & right.
+        # Final result is: (center_x + image_width + center_x) == new_image_size.width()
+        center_x = (new_image_size.width() - scaled_image_pixmap.width()) // 2
+        center_y = (new_image_size.height() - scaled_image_pixmap.height()) // 2
+
+        image_painter.drawPixmap(center_x, center_y, scaled_image_pixmap)
+        image_painter.end()
+
+        self.rendered_image = self.pixmap_render.toImage()
+
     def image_clicked(self):
-        # Casted so autocomplete works properly.
-        sender = cast(QPushButton, self.sender())
-
-        btn_icon = sender.icon()
-        btn_icon = btn_icon.pixmap(50, 50)
-
-        QApplication.clipboard().setImage(btn_icon.toImage())
+        QApplication.clipboard().setImage(self.rendered_image)
 
 
 class Imoji(QMainWindow):
@@ -79,6 +118,7 @@ class Imoji(QMainWindow):
         # Add directory & file selection logic later. For now we use script's dir.
         example_dir = pathlib.Path(__file__).resolve()
 
+        # TODO: Maybe make IMAGES_PER_ROW scale with window size.
         IMAGES_PER_ROW = 4
         images_added = 0
         row, column = 0, 0
@@ -101,12 +141,10 @@ class Imoji(QMainWindow):
         central_layout.addLayout(images_layout)
 
     def is_image(self, file: pathlib.Path) -> bool:
-        try:
-            with Image.open(file) as image:
-                image.verify()
-            return True
-        except:
-            return False
+        image_format = QImageReader.imageFormat(str(file))
+
+        # image_format is an empty string if invalid.
+        return image_format != ""
 
 
 # This block only runs if the module/file is run directly, not imported.
@@ -121,6 +159,5 @@ if __name__ == "__main__":
 # 1. Make a file dialog button for selecting both folders and individual images.
 # 2. Save the individual image paths and folders to a file for reading later ("settings.json" or something).
 #    Automatically load this settings file on launch.  If deleted, load default settings.
-# 3. For each selected image file, and for each image file in the selected folder, place a custom image widget (make a seperate class for these image widgets).
-#    Image widgets copy the image displayed. Perhaps as a square, fixed-size image.
-#    Number of image widgets per row, and size of them, TBD by experimentation.
+# 3. Support Animated GIFs?
+# 4. Support custom image backgrounds or perhaps
